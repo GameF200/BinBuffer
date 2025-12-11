@@ -1,0 +1,1 @@
+BinBuffer is a runtime Buffer / Serialization library for roblox studio
