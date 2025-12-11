@@ -2,7 +2,7 @@
 --!optimize 2
 
 
--- typrs
+-- types
 export type Buffer = {
 	_buffer: buffer,
 	_maxSize: number,
