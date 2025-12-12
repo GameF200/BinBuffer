@@ -2,7 +2,7 @@
 --!optimize 2
 
 
--- types
+
 export type Buffer = {
 	_buffer: buffer,
 	_maxSize: number,
@@ -103,18 +103,39 @@ local COLOR_SEQUENCE = 28
 local BRICK_COLOR = 29
 local TABLE = 30
 
-local INT8_MIN = -128
-local INT32_MIN = -2147483648
-local UINT8_MAX = 255
-local UINT16_MAX = 65535
-local UINT32_MAX = 4294967295
-local MEGABYTE = 1048576
-local MAX_REASONABLE_SIZE = 67108864
-local CFRAME_SCALE = 10430.219195527361
-local CFRAME_INV_SCALE = 9.587379924285257e-05
-local UDIM_SCALE = 1000
-local UDIM_INV_SCALE = 0.001
-local FLOAT_TO_BYTE_SCALE = 255
+--vector2/3 F16
+local VECTOR2F16 = 31
+local VECTOR3F16 = 32
+
+-- vector2/3 F24
+local VECTOR2F24 = 33
+local VECTOR3F24 = 34
+
+-- vector2/3 int 16
+local VECTOR2I16 = 37
+local VECTOR3I16 = 38
+
+-- cframe F24/F16 U8
+local CFRAMEF16U8 = 39
+local CFRAMEF24U8 = 40
+
+-- cframe F24/F16 U16
+local CFRAMEF16U16 = 43
+local CFRAMEF24U16 = 44
+
+-- constants
+local INT8_MIN              = -128
+local INT32_MIN             = -2147483648
+local UINT8_MAX             = 255
+local UINT16_MAX            = 65535
+local UINT32_MAX            = 4294967295
+local MEGABYTE              = 1048576
+local MAX_REASONABLE_SIZE   = 67108864 -- bytes
+local CFRAME_SCALE          = 10430.219195527361
+local CFRAME_INV_SCALE      = 9.587379924285257e-05
+local UDIM_SCALE            = 1000
+local UDIM_INV_SCALE        = 0.001
+local FLOAT_TO_BYTE_SCALE   = 255
 local FLOAT_FROM_BYTE_SCALE = 0.00392156862745098
 
 local function EnsureCapacity(buf: Buffer, requiredBytes: number): boolean
@@ -154,6 +175,40 @@ local function EnsureCapacity(buf: Buffer, requiredBytes: number): boolean
 	end
 
 	return true
+end
+
+
+
+local function WriteF16Data(buf: buffer, offset: number, value: number)
+	local bitOffset = offset * 8
+	if value == 0 then
+		buffer_writebits(buf, bitOffset, 16, 0)
+	elseif value ~= value then
+		buffer_writebits(buf, bitOffset, 16, 31745)
+	else
+		local sign = 0
+		if value < 0 then sign = 1 value = -value end
+		local mantissa, exponent = math_frexp(value)
+		buffer_writebits(buf, bitOffset + 0, 10, mantissa * 2048 - 1023.5)
+		buffer_writebits(buf, bitOffset + 10, 5, exponent + 14)
+		buffer_writebits(buf, bitOffset + 15, 1, sign)
+	end
+end
+
+local function WriteF24Data(buf: buffer, offset: number, value: number)
+	local bitOffset = offset * 8
+	if value == 0 then
+		buffer_writebits(buf, bitOffset, 24, 0)
+	elseif value ~= value then
+		buffer_writebits(buf, bitOffset, 24, 8323073)
+	else
+		local sign = 0
+		if value < 0 then sign = 1 value = -value end
+		local mantissa, exponent = math_frexp(value)
+		buffer_writebits(buf, bitOffset + 0, 17, mantissa * 262144 - 131071.5)
+		buffer_writebits(buf, bitOffset + 17, 6, exponent + 30)
+		buffer_writebits(buf, bitOffset + 23, 1, sign)
+	end
 end
 
 local function ClassifyNumber(value: number): number
@@ -258,6 +313,8 @@ local NUMBER_WRITERS = {
 		buf._writeOffset += 9
 		return true
 	end,
+	
+	-- fallback number
 	[10] = function(buf: Buffer, value: number)
 		buffer_writeu8(buf._buffer, buf._writeOffset, NUMBER_F64)
 		buffer_writef64(buf._buffer, buf._writeOffset + 1, value)
@@ -338,6 +395,162 @@ function Buffer:AddVector2(value: Vector2): boolean
 	return true
 end
 
+function Buffer:AddVector2F16(value: Vector2): boolean
+	if self._destroyed then return false end
+	if self._writeOffset + 5 > buffer_len(self._buffer) then
+		if not EnsureCapacity(self, 5) then return false end
+	end
+	buffer_writeu8(self._buffer, self._writeOffset, VECTOR2F16)
+	WriteF16Data(self._buffer, self._writeOffset + 1, value.X)
+	WriteF16Data(self._buffer, self._writeOffset + 3, value.Y)
+	self._writeOffset += 5
+	return true
+end
+
+function Buffer:AddVector3F16(value: Vector3): boolean
+	if self._destroyed then return false end
+	if self._writeOffset + 7 > buffer_len(self._buffer) then
+		if not EnsureCapacity(self, 7) then return false end
+	end
+	buffer_writeu8(self._buffer, self._writeOffset, VECTOR3F16)
+	WriteF16Data(self._buffer, self._writeOffset + 1, value.X)
+	WriteF16Data(self._buffer, self._writeOffset + 3, value.Y)
+	WriteF16Data(self._buffer, self._writeOffset + 5, value.Z)
+	self._writeOffset += 7
+	return true
+end
+
+function Buffer:AddVector2F24(value: Vector2): boolean
+	if self._destroyed then return false end
+	if self._writeOffset + 7 > buffer_len(self._buffer) then
+		if not EnsureCapacity(self, 7) then return false end
+	end
+	buffer_writeu8(self._buffer, self._writeOffset, VECTOR2F24)
+	WriteF24Data(self._buffer, self._writeOffset + 1, value.X)
+	WriteF24Data(self._buffer, self._writeOffset + 4, value.Y)
+	self._writeOffset += 7
+	return true
+end
+
+function Buffer:AddVector3F24(value: Vector3): boolean
+	if self._destroyed then return false end
+	if self._writeOffset + 10 > buffer_len(self._buffer) then
+		if not EnsureCapacity(self, 10) then return false end
+	end
+	buffer_writeu8(self._buffer, self._writeOffset, VECTOR3F24)
+	WriteF24Data(self._buffer, self._writeOffset + 1, value.X)
+	WriteF24Data(self._buffer, self._writeOffset + 4, value.Y)
+	WriteF24Data(self._buffer, self._writeOffset + 7, value.Z)
+	self._writeOffset += 10
+	return true
+end
+
+function Buffer:AddVector2I16(value: Vector2int16)
+	if self._destroyed then return false end
+	if self._writeOffset + 5 > buffer_len(self._buffer) then
+		if not EnsureCapacity(self, 5) then return false end
+	end
+	buffer_writeu8(self._buffer, self._writeOffset, VECTOR2I16)
+	buffer_writei16(self._buffer, self._writeOffset, value.X)
+	buffer_writei16(self._buffer, self._writeOffset, value.Y)
+	self._writeOffset += 5
+	return true
+end
+
+function Buffer:AddVector3I16(value: Vector3int16)
+	if self._destroyed then return false end
+	if self._writeOffset + 7 > buffer_len(self._buffer) then
+		if not EnsureCapacity(self, 7) then return false end
+	end
+	buffer_writeu8(self._buffer, self._writeOffset, VECTOR3I16)
+	buffer_writei16(self._buffer, self._writeOffset, value.X)
+	buffer_writei16(self._buffer, self._writeOffset, value.Y)
+	buffer_writei16(self._buffer, self._writeOffset, value.Z)
+	self._writeOffset += 7
+	return true
+end
+
+function Buffer:AddCFrameF24U8(value: CFrame): boolean
+	if self._destroyed then return false end
+	if self._writeOffset + 13 > buffer_len(self._buffer) then
+		if not EnsureCapacity(self, 13) then return false end
+	end
+	local rx, ry, rz = value:ToEulerAnglesXYZ()
+	
+	buffer_writeu8(self._buffer, self._writeOffset, CFRAMEF24U8)
+	
+	buffer_writeu8(self._buffer, self._writeOffset + 1, rx * CFRAME_SCALE + 0.5)
+	buffer_writeu8(self._buffer, self._writeOffset + 2, ry * CFRAME_SCALE + 0.5)
+	buffer_writeu8(self._buffer, self._writeOffset + 3, rz * CFRAME_SCALE + 0.5)
+	
+	WriteF24Data(self._buffer, self._writeOffset + 4, value.X)
+	WriteF24Data(self._buffer, self._writeOffset + 7, value.Y)
+	WriteF24Data(self._buffer, self._writeOffset + 10, value.Z)
+	self._writeOffset += 13
+	return true
+end
+
+function Buffer:AddCFrameF24U16(value: CFrame): boolean
+	if self._destroyed then return false end
+	if self._writeOffset + 16 > buffer_len(self._buffer) then
+		if not EnsureCapacity(self, 16) then return false end
+	end
+	local rx, ry, rz = value:ToEulerAnglesXYZ()
+
+	buffer_writeu8(self._buffer, self._writeOffset, CFRAMEF24U8)
+
+	buffer_writeu16(self._buffer, self._writeOffset + 1, rx * CFRAME_SCALE + 0.5)
+	buffer_writeu16(self._buffer, self._writeOffset + 3, ry * CFRAME_SCALE + 0.5)
+	buffer_writeu16(self._buffer, self._writeOffset + 5, rz * CFRAME_SCALE + 0.5)
+
+	WriteF24Data(self._buffer, self._writeOffset + 7, value.X)
+	WriteF24Data(self._buffer, self._writeOffset + 10, value.Y)
+	WriteF24Data(self._buffer, self._writeOffset + 13, value.Z)
+	self._writeOffset += 16
+	return true
+end
+
+function Buffer:AddCFrameF16U8(value: CFrame): boolean
+	if self._destroyed then return false end
+	if self._writeOffset + 10 > buffer_len(self._buffer) then
+		if not EnsureCapacity(self, 10) then return false end
+	end
+	local rx, ry, rz = value:ToEulerAnglesXYZ()
+	
+	buffer_writeu8(self._buffer, self._writeOffset, CFRAMEF16U8)
+	
+	buffer_writeu8(self._buffer, self._writeOffset + 1, rx * CFRAME_SCALE + 0.5)
+	buffer_writeu8(self._buffer, self._writeOffset + 2, ry * CFRAME_SCALE + 0.5)
+	buffer_writeu8(self._buffer, self._writeOffset + 3, rz * CFRAME_SCALE + 0.5)
+	
+	WriteF16Data(self._buffer, self._writeOffset + 4, value.X)
+	WriteF16Data(self._buffer, self._writeOffset + 6, value.Y)
+	WriteF16Data(self._buffer, self._writeOffset + 8, value.Z)
+	self._writeOffset += 10
+	return true
+end
+
+function Buffer:AddCFrameF16U16(value: CFrame): boolean
+	if self._destroyed then return false end
+	if self._writeOffset + 13 > buffer_len(self._buffer) then
+		if not EnsureCapacity(self, 13) then return false end
+	end
+	local rx, ry, rz = value:ToEulerAnglesXYZ()
+	
+	buffer_writeu8(self._buffer, self._writeOffset, CFRAMEF16U16)
+	
+	buffer_writeu16(self._buffer, self._writeOffset + 1, rx * CFRAME_SCALE + 0.5)
+	buffer_writeu16(self._buffer, self._writeOffset + 3, ry * CFRAME_SCALE + 0.5)
+	buffer_writeu16(self._buffer, self._writeOffset + 5, rz * CFRAME_SCALE + 0.5)
+	
+	WriteF16Data(self._buffer, self._writeOffset + 7, value.X)
+	WriteF16Data(self._buffer, self._writeOffset + 9, value.Y)
+	WriteF16Data(self._buffer, self._writeOffset + 11, value.Z)
+	self._writeOffset += 13
+	return true
+end
+
+
 function Buffer:AddCFrame(value: CFrame): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 19 > buffer_len(self._buffer) then
@@ -345,15 +558,20 @@ function Buffer:AddCFrame(value: CFrame): boolean
 	end
 	local rx, ry, rz = value:ToEulerAnglesXYZ()
 	buffer_writeu8(self._buffer, self._writeOffset, CFRAME)
+	
 	buffer_writeu16(self._buffer, self._writeOffset + 1, rx * CFRAME_SCALE + 0.5)
 	buffer_writeu16(self._buffer, self._writeOffset + 3, ry * CFRAME_SCALE + 0.5)
 	buffer_writeu16(self._buffer, self._writeOffset + 5, rz * CFRAME_SCALE + 0.5)
+	
 	buffer_writef32(self._buffer, self._writeOffset + 7, value.X)
 	buffer_writef32(self._buffer, self._writeOffset + 11, value.Y)
 	buffer_writef32(self._buffer, self._writeOffset + 15, value.Z)
+	
 	self._writeOffset += 19
 	return true
 end
+
+
 
 function Buffer:AddColor3(value: Color3): boolean
 	if self._destroyed then return false end
@@ -539,6 +757,10 @@ function Buffer:AddTable(value: {[any]: any}): boolean
 			if not self:AddBrickColor(val) then return false end
 		elseif valType == "table" then
 			if not self:AddTable(val) then return false end
+		elseif valType == "Vector3int16" then
+			if not self:AddVector3I16(val) then return false end
+		elseif valType == "Vector2int16" then
+			if not self:AddVector2I16(val) then return false end	
 		else
 			if not self:AddString(tostring(val)) then return false end
 		end
@@ -660,6 +882,12 @@ function Buffer.Read(buf: Buffer): ({any})
 		[INSTANCE] = ReadInstance,
 		[VECTOR2] = function() return Vector2.new(ReadF32(), ReadF32()) end,
 		[VECTOR3] = function() return Vector3.new(ReadF32(), ReadF32(), ReadF32()) end,
+		[VECTOR2F16] = function() return Vector2.new(ReadF16(), ReadF16()) end,
+		[VECTOR2F24] = function() return Vector2.new(ReadF24(), ReadF24()) end,
+		[VECTOR2I16] = function() return Vector2int16.new(ReadS16(), ReadS16()) end,
+		[VECTOR3F16] = function() return Vector3.new(ReadF16(), ReadF16(), ReadF16()) end,
+		[VECTOR3F24] = function() return Vector3.new(ReadF24(), ReadF24(), ReadF24()) end,
+		[VECTOR3I16] = function() return Vector3int16.new(ReadS16(), ReadS16(), ReadS16()) end,
 		[COLOR3] = function() return Color3.fromRGB(ReadU8(), ReadU8(), ReadU8()) end,
 		[UDIM] = function() return UDim.new(ReadS16() * UDIM_INV_SCALE, ReadS16()) end,
 		[UDIM2] = function() return UDim2.new(ReadS16() * UDIM_INV_SCALE, ReadS16(), ReadS16() * UDIM_INV_SCALE, ReadS16()) end,
@@ -668,6 +896,30 @@ function Buffer.Read(buf: Buffer): ({any})
 			local ry = ReadU16() * CFRAME_INV_SCALE
 			local rz = ReadU16() * CFRAME_INV_SCALE
 			return CFrame.fromEulerAnglesXYZ(rx, ry, rz) + Vector3.new(ReadF32(), ReadF32(), ReadF32())
+		end,
+		[CFRAMEF16U8] = function()
+			local rx = ReadU8() * CFRAME_INV_SCALE
+			local ry = ReadU8() * CFRAME_INV_SCALE
+			local rz = ReadU8() * CFRAME_INV_SCALE
+			return CFrame.fromEulerAnglesXYZ(rx, ry, rz) + Vector3.new(ReadF16(), ReadF16(), ReadF16())
+		end,
+		[CFRAMEF24U8] = function()
+			local rx = ReadU8() * CFRAME_INV_SCALE
+			local ry = ReadU8() * CFRAME_INV_SCALE
+			local rz = ReadU8() * CFRAME_INV_SCALE
+			return CFrame.fromEulerAnglesXYZ(rx, ry, rz) + Vector3.new(ReadF24(), ReadF24(), ReadF24())
+		end,
+		[CFRAMEF16U16] = function()
+			local rx = ReadU16() * CFRAME_INV_SCALE
+			local ry = ReadU16() * CFRAME_INV_SCALE
+			local rz = ReadU16() * CFRAME_INV_SCALE
+			return CFrame.fromEulerAnglesXYZ(rx, ry, rz) + Vector3.new(ReadF16(), ReadF16(), ReadF16())
+		end,
+		[CFRAMEF24U16] = function()
+			local rx = ReadU16() * CFRAME_INV_SCALE
+			local ry = ReadU16() * CFRAME_INV_SCALE
+			local rz = ReadU16() * CFRAME_INV_SCALE
+			return CFrame.fromEulerAnglesXYZ(rx, ry, rz) + Vector3.new(ReadF24(), ReadF24(), ReadF24())
 		end,
 		[RECT] = function() return Rect.new(ReadF32(), ReadF32(), ReadF32(), ReadF32()) end,
 		[NUMBER_RANGE] = function() return NumberRange.new(ReadF32(), ReadF32()) end,
