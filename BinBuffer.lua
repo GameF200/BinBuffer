@@ -20,8 +20,18 @@ export type Buffer = {
 	AddBoolean: (self: Buffer, value: boolean) -> boolean,
 	AddString: (self: Buffer, value: string) -> boolean,
 	AddVector3: (self: Buffer, value: Vector3) -> boolean,
+	AddVector3F16: (self: Buffer, value: Vector3) -> boolean,
+	AddVector3F24: (self: Buffer, value: Vector3) -> boolean,
+	AddVector3I16: (self: Buffer, value: Vector3int16) -> boolean,
 	AddVector2: (self: Buffer, value: Vector2) -> boolean,
+	AddVector2F16: (self: Buffer, value: Vector2) -> boolean,
+	AddVector2F24: (self: Buffer, value: Vector2) -> boolean,
+	AddVector2I16: (self: Buffer, vlue: Vector2int16) -> boolean,
 	AddCFrame: (self: Buffer, value: CFrame) -> boolean,
+	AddCFrameF16U8: (self: Buffer, value: CFrame) -> boolean,
+	AddCFrameF16U16: (self: Buffer, value: CFrame) -> boolean,
+	AddCFrameF24U8: (self: Buffer, value: CFrame) -> boolean,
+	AddCFrameF24U16: (self: Buffer, value: CFrame) -> boolean,
 	AddColor3: (self: Buffer, value: Color3) -> boolean,
 	AddUDim: (self: Buffer, value: UDim) -> boolean,
 	AddUDim2: (self: Buffer, value: UDim2) -> boolean,
@@ -138,7 +148,7 @@ local UDIM_INV_SCALE        = 0.001
 local FLOAT_TO_BYTE_SCALE   = 255
 local FLOAT_FROM_BYTE_SCALE = 0.00392156862745098
 
-local function EnsureCapacity(buf: Buffer, requiredBytes: number): boolean
+local function Alloc(buf: Buffer, requiredBytes: number): boolean
 	local currentBufferSize = buffer_len(buf._buffer)
 	local target_len = buf._writeOffset + requiredBytes
 
@@ -328,7 +338,7 @@ function Buffer:AddNumber(value: number): boolean
 	local numType = ClassifyNumber(value)
 	local requiredBytes = NUMBER_SIZES[numType]
 	if self._writeOffset + requiredBytes > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, requiredBytes) then return false end
+		if not Alloc(self, requiredBytes) then return false end
 	end
 	return NUMBER_WRITERS[numType](self, value)
 end
@@ -336,7 +346,7 @@ end
 function Buffer:AddBoolean(value: boolean): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 2 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 2) then return false end
+		if not Alloc(self, 2) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, BOOLEAN)
 	buffer_writeu8(self._buffer, self._writeOffset + 1, value and 1 or 0)
@@ -350,7 +360,7 @@ function Buffer:AddString(value: string): boolean
 	if len < 256 then
 		local requiredBytes = 2 + len
 		if self._writeOffset + requiredBytes > buffer_len(self._buffer) then
-			if not EnsureCapacity(self, requiredBytes) then return false end
+			if not Alloc(self, requiredBytes) then return false end
 		end
 		buffer_writeu8(self._buffer, self._writeOffset, STRING)
 		buffer_writeu8(self._buffer, self._writeOffset + 1, len)
@@ -360,7 +370,7 @@ function Buffer:AddString(value: string): boolean
 	else
 		local requiredBytes = 3 + len
 		if self._writeOffset + requiredBytes > buffer_len(self._buffer) then
-			if not EnsureCapacity(self, requiredBytes) then return false end
+			if not Alloc(self, requiredBytes) then return false end
 		end
 		buffer_writeu8(self._buffer, self._writeOffset, STRING_LONG)
 		buffer_writeu16(self._buffer, self._writeOffset + 1, len)
@@ -373,8 +383,9 @@ end
 function Buffer:AddVector3(value: Vector3): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 13 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 13) then return false end
+		if not Alloc(self, 13) then return false end
 	end
+
 	buffer_writeu8(self._buffer, self._writeOffset, VECTOR3)
 	buffer_writef32(self._buffer, self._writeOffset + 1, value.X)
 	buffer_writef32(self._buffer, self._writeOffset + 5, value.Y)
@@ -386,7 +397,7 @@ end
 function Buffer:AddVector2(value: Vector2): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 9 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 9) then return false end
+		if not Alloc(self, 9) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, VECTOR2)
 	buffer_writef32(self._buffer, self._writeOffset + 1, value.X)
@@ -398,7 +409,7 @@ end
 function Buffer:AddVector2F16(value: Vector2): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 5 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 5) then return false end
+		if not Alloc(self, 5) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, VECTOR2F16)
 	WriteF16Data(self._buffer, self._writeOffset + 1, value.X)
@@ -410,7 +421,7 @@ end
 function Buffer:AddVector3F16(value: Vector3): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 7 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 7) then return false end
+		if not Alloc(self, 7) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, VECTOR3F16)
 	WriteF16Data(self._buffer, self._writeOffset + 1, value.X)
@@ -423,7 +434,7 @@ end
 function Buffer:AddVector2F24(value: Vector2): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 7 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 7) then return false end
+		if not Alloc(self, 7) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, VECTOR2F24)
 	WriteF24Data(self._buffer, self._writeOffset + 1, value.X)
@@ -435,7 +446,7 @@ end
 function Buffer:AddVector3F24(value: Vector3): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 10 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 10) then return false end
+		if not Alloc(self, 10) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, VECTOR3F24)
 	WriteF24Data(self._buffer, self._writeOffset + 1, value.X)
@@ -448,7 +459,7 @@ end
 function Buffer:AddVector2I16(value: Vector2int16)
 	if self._destroyed then return false end
 	if self._writeOffset + 5 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 5) then return false end
+		if not Alloc(self, 5) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, VECTOR2I16)
 	buffer_writei16(self._buffer, self._writeOffset, value.X)
@@ -460,7 +471,7 @@ end
 function Buffer:AddVector3I16(value: Vector3int16)
 	if self._destroyed then return false end
 	if self._writeOffset + 7 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 7) then return false end
+		if not Alloc(self, 7) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, VECTOR3I16)
 	buffer_writei16(self._buffer, self._writeOffset, value.X)
@@ -473,7 +484,7 @@ end
 function Buffer:AddCFrameF24U8(value: CFrame): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 13 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 13) then return false end
+		if not Alloc(self, 13) then return false end
 	end
 	local rx, ry, rz = value:ToEulerAnglesXYZ()
 	
@@ -493,7 +504,7 @@ end
 function Buffer:AddCFrameF24U16(value: CFrame): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 16 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 16) then return false end
+		if not Alloc(self, 16) then return false end
 	end
 	local rx, ry, rz = value:ToEulerAnglesXYZ()
 
@@ -513,7 +524,7 @@ end
 function Buffer:AddCFrameF16U8(value: CFrame): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 10 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 10) then return false end
+		if not Alloc(self, 10) then return false end
 	end
 	local rx, ry, rz = value:ToEulerAnglesXYZ()
 	
@@ -533,7 +544,7 @@ end
 function Buffer:AddCFrameF16U16(value: CFrame): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 13 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 13) then return false end
+		if not Alloc(self, 13) then return false end
 	end
 	local rx, ry, rz = value:ToEulerAnglesXYZ()
 	
@@ -554,7 +565,7 @@ end
 function Buffer:AddCFrame(value: CFrame): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 19 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 19) then return false end
+		if not Alloc(self, 19) then return false end
 	end
 	local rx, ry, rz = value:ToEulerAnglesXYZ()
 	buffer_writeu8(self._buffer, self._writeOffset, CFRAME)
@@ -576,7 +587,7 @@ end
 function Buffer:AddColor3(value: Color3): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 4 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 4) then return false end
+		if not Alloc(self, 4) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, COLOR3)
 	buffer_writeu8(self._buffer, self._writeOffset + 1, value.R * FLOAT_TO_BYTE_SCALE + 0.5)
@@ -589,7 +600,7 @@ end
 function Buffer:AddUDim(value: UDim): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 5 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 5) then return false end
+		if not Alloc(self, 5) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, UDIM)
 	buffer_writei16(self._buffer, self._writeOffset + 1, value.Scale * UDIM_SCALE)
@@ -601,7 +612,7 @@ end
 function Buffer:AddUDim2(value: UDim2): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 9 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 9) then return false end
+		if not Alloc(self, 9) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, UDIM2)
 	buffer_writei16(self._buffer, self._writeOffset + 1, value.X.Scale * UDIM_SCALE)
@@ -615,7 +626,7 @@ end
 function Buffer:AddRect(value: Rect): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 17 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 17) then return false end
+		if not Alloc(self, 17) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, RECT)
 	buffer_writef32(self._buffer, self._writeOffset + 1, value.Min.X)
@@ -629,7 +640,7 @@ end
 function Buffer:AddNumberRange(value: NumberRange): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 9 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 9) then return false end
+		if not Alloc(self, 9) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, NUMBER_RANGE)
 	buffer_writef32(self._buffer, self._writeOffset + 1, value.Min)
@@ -643,7 +654,7 @@ function Buffer:AddNumberSequence(value: NumberSequence): boolean
 	local len = #value.Keypoints
 	local requiredBytes = 2 + len * 3
 	if self._writeOffset + requiredBytes > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, requiredBytes) then return false end
+		if not Alloc(self, requiredBytes) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, NUMBER_SEQUENCE)
 	buffer_writeu8(self._buffer, self._writeOffset + 1, len)
@@ -663,7 +674,7 @@ function Buffer:AddColorSequence(value: ColorSequence): boolean
 	local len = #value.Keypoints
 	local requiredBytes = 2 + len * 4
 	if self._writeOffset + requiredBytes > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, requiredBytes) then return false end
+		if not Alloc(self, requiredBytes) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, COLOR_SEQUENCE)
 	buffer_writeu8(self._buffer, self._writeOffset + 1, len)
@@ -682,7 +693,7 @@ end
 function Buffer:AddBrickColor(value: BrickColor): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 3 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 3) then return false end
+		if not Alloc(self, 3) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, BRICK_COLOR)
 	buffer_writeu16(self._buffer, self._writeOffset + 1, value.Number)
@@ -693,19 +704,20 @@ end
 function Buffer:AddInstance(value: Instance): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 1 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 1) then return false end
+		if not Alloc(self, 1) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, INSTANCE)
 	self._writeOffset += 1
 	self._instancesOffset += 1
 	self._instances[self._instancesOffset] = value
+	
 	return true
 end
 
 function Buffer:AddTable(value: {[any]: any}): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 1 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 1) then return false end
+		if not Alloc(self, 1) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, TABLE)
 	self._writeOffset += 1
@@ -767,7 +779,7 @@ function Buffer:AddTable(value: {[any]: any}): boolean
 	end
 
 	if self._writeOffset + 1 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 1) then return false end
+		if not Alloc(self, 1) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, NIL)
 	self._writeOffset += 1
@@ -777,7 +789,7 @@ end
 function Buffer:AddNil(): boolean
 	if self._destroyed then return false end
 	if self._writeOffset + 1 > buffer_len(self._buffer) then
-		if not EnsureCapacity(self, 1) then return false end
+		if not Alloc(self, 1) then return false end
 	end
 	buffer_writeu8(self._buffer, self._writeOffset, NIL)
 	self._writeOffset += 1
@@ -786,10 +798,10 @@ end
 
 function Buffer:Flush(): boolean
 	if self._writeOffset == 0 or self._destroyed then return false end
-	local actualDataSize = math_min(self._writeOffset, buffer_len(self._buffer))
-	if actualDataSize == 0 then return false end
-	local filled = buffer_create(actualDataSize)
-	buffer_copy(filled, 0, self._buffer, 0, actualDataSize)
+	local DataSize = math_min(self._writeOffset, buffer_len(self._buffer))
+	if DataSize == 0 then return false end
+	local filled = buffer_create(DataSize)
+	buffer_copy(filled, 0, self._buffer, 0, DataSize)
 	if self._callback then self._callback(filled) end
 	self:Clear()
 	return true
@@ -809,10 +821,6 @@ end
 function Buffer:Destroy()
 	if self._destroyed then return end
 	self._destroyed = true
-	if self._flushTask then
-		task_cancel(self._flushTask)
-		self._flushTask = nil
-	end
 	self._buffer = nil
 	self._writeOffset = 0
 	self._instancesOffset = 0
@@ -994,7 +1002,6 @@ function Buffer.create(options: {
 		_buffer = bufferObj,
 		_callback = callback,
 		_maxSize = maxSize,
-		_flushTask = nil,
 		_destroyed = false,
 		_writeOffset = 0, 
 		_instances = {},
