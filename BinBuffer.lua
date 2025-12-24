@@ -119,8 +119,6 @@ export type Buffer = {
 	_size: number,
 	_destroyed: boolean,
 	_writeOffset: number,
-	_instances: {Instance},
-	_instancesOffset: number
 }
 
 local writers = {}
@@ -266,16 +264,12 @@ local function create(options: {
 		_destroyed = false,
 		_size = size,
 		_writeOffset = 0,
-		_instances = {},
-		_instancesOffset = 0
 	} :: Buffer
 end
 
 -- clears buffer but not destroys
 local function clear(buf: Buffer)
 	buf._writeOffset = 0
-	buf._instancesOffset = 0
-	table_clear(buf._instances)
 
 	local originalSize = buf._size or 256
 	buf._buffer = buffer_create(originalSize)
@@ -286,8 +280,6 @@ local function destroy(buf: Buffer)
 	buf._destroyed = true
 	buf._buffer = nil
 	buf._writeOffset = 0
-	buf._instancesOffset = 0
-	table_clear(buf._instances)
 	
 	buf = nil
 end
@@ -370,6 +362,128 @@ function writers.addNumber(buf: Buffer, value: number): boolean
 		buf._writeOffset += 9
 	end
 
+	return true
+end
+
+function writers.addU8(buf: Buffer, value: number): boolean
+	if buf._writeOffset + 2 > buffer_len(buf._buffer) then
+		if not Alloc(buf, 2) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, NUMBER_U8)
+	buffer_writeu8(buf._buffer, buf._writeOffset + 1, value)
+	buf._writeOffset += 2
+	return true	
+end
+
+function writers.addU16(buf: Buffer, value :number): boolean
+	if buf._writeOffset + 3 > buffer_len(buf._buffer) then
+		if not Alloc(buf, 3) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, NUMBER_U16)
+	buffer_writeu16(buf._buffer, buf._writeOffset + 1, value)
+	buf._writeOffset += 3
+	return true	
+end
+
+function writers.addU32(buf: Buffer, value: number): boolean
+	if buf._writeOffset + 5 > buffer_len(buf._buffer) then
+		if not Alloc(buf, 5) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, NUMBER_U32)
+	buffer_writeu32(buf._buffer, buf._writeOffset + 1, value)
+	buf._writeOffset += 5
+	return true	
+end
+
+function writers.addI8(buf: Buffer, value: number): boolean
+	if buf._writeOffset + 2 > buffer_len(buf._buffer) then
+		if not Alloc(buf, 2) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, NUMBER_I8)
+	buffer_writei8(buf._buffer, buf._writeOffset + 1, value)
+	buf._writeOffset += 2
+	return true	
+end
+
+function writers.addI16(buf: Buffer, value: number): boolean
+	if buf._writeOffset + 3 > buffer_len(buf._buffer) then
+		if not Alloc(buf, 3) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, NUMBER_I16)
+	buffer_writei16(buf._buffer, buf._writeOffset + 1, value)
+	buf._writeOffset += 3
+	return true	
+end
+
+function writers.addI32(buf: Buffer, value: number): boolean
+	if buf._writeOffset + 5 > buffer_len(buf._buffer) then
+		if not Alloc(buf, 5) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, NUMBER_I32)
+	buffer_writei32(buf._buffer, buf._writeOffset + 1, value)
+	buf._writeOffset += 5
+	return true	
+end
+
+function writers.addF16(buf: Buffer, value: number): boolean
+	if buf._writeOffset + 3 > buffer_len(buf._buffer) then
+		if not Alloc(buf, 3) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, NUMBER_F16)
+	WriteF16Data(buf._buffer, buf._writeOffset + 1, value)
+	buf._writeOffset += 3
+	return true
+end
+
+function writers.addF24(buf: Buffer, value: number): boolean
+	if buf._writeOffset + 4 > buffer_len(buf._buffer) then
+		if not Alloc(buf, 4) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, NUMBER_F24)
+	WriteF24Data(buf._buffer, buf._writeOffset + 1, value)
+	buf._writeOffset += 4
+	return true
+end
+
+function writers.addF32(buf: Buffer, value: number): boolean
+	if buf._writeOffset + 5 > buffer_len(buf._buffer) then
+		if not Alloc(buf, 5) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, NUMBER_F32)
+	buffer_writef32(buf._buffer, buf._writeOffset + 1, value)
+	buf._writeOffset += 5
+	return true	
+end
+
+function writers.addF64(buf: Buffer, value: number): boolean
+	if buf._writeOffset + 9 > buffer_len(buf._buffer) then
+		if not Alloc(buf, 9) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, NUMBER_F64)
+	buffer_writef64(buf._buffer, buf._writeOffset + 1, value)
+	buf._writeOffset += 9
+	return true	
+end
+
+function writers.addStringShort(buf: Buffer, value: string): boolean
+	if buf._writeOffset + 2 + string_len(value) > buffer_len(buf._buffer) then
+		if not Alloc(buf, 2 + string_len(value)) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, STRING)
+	buffer_writeu8(buf._buffer, buf._writeOffset + 1, string_len(value))
+	buffer_writestring(buf._buffer, buf._writeOffset + 2, value)
+	buf._writeOffset = buf._writeOffset + 2 + string_len(value)
+	return true
+end
+
+function writers.addStringLong(buf: Buffer, value: string): boolean
+	if buf._writeOffset + 3 + string_len(value) > buffer_len(buf._buffer) then
+		if not Alloc(buf, 3 + string_len(value)) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, STRING_LONG)
+	buffer_writeu16(buf._buffer, buf._writeOffset + 1, string_len(value))
+	buffer_writestring(buf._buffer, buf._writeOffset + 3, value)
+	buf._writeOffset = buf._writeOffset + 3 + string_len(value)
 	return true
 end
 
@@ -721,18 +835,6 @@ function writers.addBrickColor(buf: Buffer, value: BrickColor): boolean
 	return true
 end
 
-function writers.addInstance(buf: Buffer, value: Instance): boolean
-	if buf._writeOffset + 1 > buffer_len(buf._buffer) then
-		if not Alloc(buf, 1) then return false end
-	end
-
-	buffer_writeu8(buf._buffer, buf._writeOffset, INSTANCE)
-	buf._writeOffset += 1
-	buf._instancesOffset += 1
-	buf._instances[buf._instancesOffset] = value
-
-	return true
-end
 
 function writers.addTable(buf: Buffer, value: {[any]: any}): boolean
 	if buf._writeOffset + 1 > buffer_len(buf._buffer) then
@@ -750,8 +852,6 @@ function writers.addTable(buf: Buffer, value: {[any]: any}): boolean
 			if not writers.addString(buf, key) then return false end
 		elseif keyType == "boolean" then
 			if not writers.addBoolean(buf, key) then return false end
-		elseif keyType == "Instance" then
-			if not writers.addInstance(buf, key) then return false end
 		else
 			if not writers.addString(buf, tostring(key)) then return false end
 		end
@@ -763,8 +863,6 @@ function writers.addTable(buf: Buffer, value: {[any]: any}): boolean
 			if not writers.addString(buf, val) then return false end
 		elseif valType == "boolean" then
 			if not writers.addBoolean(buf, val) then return false end
-		elseif valType == "Instance" then
-			if not writers.addInstance(buf, val) then return false end
 		elseif valType == "Vector3" then
 			if not writers.addVector3(buf, val) then return false end
 		elseif valType == "Vector2" then
@@ -811,226 +909,287 @@ end
 local function fromBuffer(buf: buffer): Buffer?
 	local originalBuffer = buf
 	local bufferSize = buffer_len(originalBuffer)
-	
-	if buffer_len(buf) == 0 then
+
+	if bufferSize == 0 then
 		return nil
 	end
-	
-	local readOffset = 0
-	local instancesArray = {}
-	local instancesOffset = 0
 
 	local function PeekU8(offset: number): number?
 		if offset >= bufferSize then return nil end
 		return buffer_readu8(originalBuffer, offset)
 	end
 
-	local function ReadU8(): number?
-		if readOffset >= bufferSize then return nil end
-		local value = buffer_readu8(originalBuffer, readOffset)
-		readOffset += 1
-		return value
-	end
-	
-	while readOffset < bufferSize do
-		local dataType = PeekU8(readOffset)
-		if not dataType then break end
+	local function ParseData(startOffset: number): (any?, number, number, {Instance})
+		local offset = startOffset
+		local instancesArray = {}
+		local instancesOffset = 0
+		local object = nil
 
-		local skipBytes = 1 
+		local dataType = PeekU8(offset)
+		if not dataType then return nil, offset - startOffset, instancesOffset, instancesArray end
 
-		if dataType == NIL then
-		elseif dataType == BOOLEAN then
-			skipBytes = 2
-		elseif dataType == NUMBER_I8 or dataType == NUMBER_U8 then
-			skipBytes = 2
-		elseif dataType == NUMBER_I16 or dataType == NUMBER_U16 then
-			skipBytes = 3
-		elseif dataType == NUMBER_I32 or dataType == NUMBER_U32 or dataType == NUMBER_F32 then
-			skipBytes = 5
-		elseif dataType == NUMBER_F16 then
-			skipBytes = 3
-		elseif dataType == NUMBER_F24 then
-			skipBytes = 4
-		elseif dataType == NUMBER_F64 then
-			skipBytes = 9
-		elseif dataType == STRING then
-			local length = PeekU8(readOffset + 1)
-			if not length then break end
-			skipBytes = 2 + length
-		elseif dataType == STRING_LONG then
-			local b1 = PeekU8(readOffset + 1)
-			local b2 = PeekU8(readOffset + 2)
-			if not b1 or not b2 then break end
-			local length = b1 + b2 * 256
-			skipBytes = 3 + length
-		elseif dataType == INSTANCE then
-			skipBytes = 1
-			instancesOffset += 1
-		elseif dataType == VECTOR2 then
-			skipBytes = 9
-		elseif dataType == VECTOR3 then
-			skipBytes = 13
-		elseif dataType == COLOR3 then
-			skipBytes = 4
-		elseif dataType == UDIM then
-			skipBytes = 5
-		elseif dataType == UDIM2 then
-			skipBytes = 9
-		elseif dataType == CFRAME then
-			skipBytes = 19
-		elseif dataType == CFRAMEF16U8 then
-			skipBytes = 10
-		elseif dataType == CFRAMEF24U8 then
-			skipBytes = 13
-		elseif dataType == CFRAMEF16U16 then
-			skipBytes = 13
-		elseif dataType == CFRAMEF24U16 then
-			skipBytes = 16
-		elseif dataType == RECT then
-			skipBytes = 17
-		elseif dataType == NUMBER_RANGE then
-			skipBytes = 9
-		elseif dataType == NUMBER_SEQUENCE then
-			local length = PeekU8(readOffset + 1)
-			if not length then break end
-			skipBytes = 2 + length * 3
-		elseif dataType == COLOR_SEQUENCE then
-			local length = PeekU8(readOffset + 1)
-			if not length then break end
-			skipBytes = 2 + length * 4
-		elseif dataType == BRICK_COLOR then
-			skipBytes = 3
-		elseif dataType == VECTOR2F16 then
-			skipBytes = 5
-		elseif dataType == VECTOR3F16 then
-			skipBytes = 7
-		elseif dataType == VECTOR2F24 then
-			skipBytes = 7
-		elseif dataType == VECTOR3F24 then
-			skipBytes = 10
-		elseif dataType == VECTOR2I16 then
-			skipBytes = 5
-		elseif dataType == VECTOR3I16 then
-			skipBytes = 7
-		elseif dataType == TABLE then
-			local tempOffset = readOffset + 1 
-			while tempOffset < bufferSize do
-				local keyType = PeekU8(tempOffset)
-				if not keyType or keyType == NIL then
-					if keyType == NIL then
-						tempOffset += 1
-					end
-					break
-				end
+		offset += 1
 
-				if keyType == NIL then
-					tempOffset += 1
-				elseif keyType == BOOLEAN then
-					tempOffset += 2
-				elseif keyType == NUMBER_I8 or keyType == NUMBER_U8 then
-					tempOffset += 2
-				elseif keyType == NUMBER_I16 or keyType == NUMBER_U16 then
-					tempOffset += 3
-				elseif keyType == NUMBER_I32 or keyType == NUMBER_U32 or keyType == NUMBER_F32 then
-					tempOffset += 5
-				elseif keyType == NUMBER_F16 then
-					tempOffset += 3
-				elseif keyType == NUMBER_F24 then
-					tempOffset += 4
-				elseif keyType == NUMBER_F64 then
-					tempOffset += 9
-				elseif keyType == STRING then
-					local length = PeekU8(tempOffset + 1)
-					if not length then break end
-					tempOffset += 2 + length
-				elseif keyType == STRING_LONG then
-					local b1 = PeekU8(tempOffset + 1)
-					local b2 = PeekU8(tempOffset + 2)
-					if not b1 or not b2 then break end
-					local length = b1 + b2 * 256
-					tempOffset += 3 + length
-				elseif keyType == INSTANCE then
-					tempOffset += 1
-					instancesOffset += 1
-				else
-					break
-				end
-				
-				local valueType = PeekU8(tempOffset)
-				if not valueType then break end
-
-				if valueType == NIL then
-					tempOffset += 1
-				elseif valueType == BOOLEAN then
-					tempOffset += 2
-				elseif valueType == NUMBER_I8 or valueType == NUMBER_U8 then
-					tempOffset += 2
-				elseif valueType == NUMBER_I16 or valueType == NUMBER_U16 then
-					tempOffset += 3
-				elseif valueType == NUMBER_I32 or valueType == NUMBER_U32 or valueType == NUMBER_F32 then
-					tempOffset += 5
-				elseif valueType == NUMBER_F16 then
-					tempOffset += 3
-				elseif valueType == NUMBER_F24 then
-					tempOffset += 4
-				elseif valueType == NUMBER_F64 then
-					tempOffset += 9
-				elseif valueType == STRING then
-					local length = PeekU8(tempOffset + 1)
-					if not length then break end
-					tempOffset += 2 + length
-				elseif valueType == STRING_LONG then
-					local b1 = PeekU8(tempOffset + 1)
-					local b2 = PeekU8(tempOffset + 2)
-					if not b1 or not b2 then break end
-					local length = b1 + b2 * 256
-					tempOffset += 3 + length
-				elseif valueType == INSTANCE then
-					tempOffset += 1
-					instancesOffset += 1
-				elseif valueType == VECTOR2 then
-					tempOffset += 9
-				elseif valueType == VECTOR3 then
-					tempOffset += 13
-				elseif valueType == COLOR3 then
-					tempOffset += 4
-				elseif valueType == UDIM then
-					tempOffset += 5
-				elseif valueType == UDIM2 then
-					tempOffset += 9
-				elseif valueType == CFRAME then
-					tempOffset += 19
-				elseif valueType == TABLE then
-					-- deep table
-					warn("[BinBuffer] Deep table detected, skipping table")
-					continue
-				else
-					break
-				end
-			end
-
-			skipBytes = tempOffset - readOffset
-		else
-			break
+		local function ReadU8(): number
+			local value = buffer_readu8(originalBuffer, offset)
+			offset += 1
+			return value
 		end
 
-		readOffset += skipBytes
+		local function ReadU16(): number
+			local value = buffer_readu16(originalBuffer, offset)
+			offset += 2
+			return value
+		end
+
+		local function ReadU32(): number
+			local value = buffer_readu32(originalBuffer, offset)
+			offset += 4
+			return value
+		end
+
+		local function ReadI8(): number
+			local value = buffer_readi8(originalBuffer, offset)
+			offset += 1
+			return value
+		end
+
+		local function ReadI16(): number
+			local value = buffer_readi16(originalBuffer, offset)
+			offset += 2
+			return value
+		end
+
+		local function ReadI32(): number
+			local value = buffer_readi32(originalBuffer, offset)
+			offset += 4
+			return value
+		end
+
+		local function ReadF32(): number
+			local value = buffer_readf32(originalBuffer, offset)
+			offset += 4
+			return value
+		end
+
+		local function ReadF64(): number
+			local value = buffer_readf64(originalBuffer, offset)
+			offset += 8
+			return value
+		end
+
+		local function ReadString(length: number): string
+			local value = buffer_readstring(originalBuffer, offset, length)
+			offset += length
+			return value
+		end
+
+		local function ReadF16(): number
+			local bitOffset = offset * 8
+			offset += 2
+
+			local mantissa = buffer_readbits(originalBuffer, bitOffset, 10)
+			local exponent = buffer_readbits(originalBuffer, bitOffset + 10, 5)
+			local sign = buffer_readbits(originalBuffer, bitOffset + 15, 1)
+
+			if exponent == 0 and mantissa == 0 then
+				return 0
+			end
+			if exponent == 31 then
+				return 0/0
+			end
+
+			local value = (mantissa / 1024 + 1) * 2 ^ (exponent - 15)
+			return sign == 0 and value or -value
+		end
+
+		local function ReadF24(): number
+			local bitOffset = offset * 8
+			offset += 3
+
+			local mantissa = buffer_readbits(originalBuffer, bitOffset, 17)
+			local exponent = buffer_readbits(originalBuffer, bitOffset + 17, 6)
+			local sign = buffer_readbits(originalBuffer, bitOffset + 23, 1)
+
+			if exponent == 0 and mantissa == 0 then
+				return 0
+			end
+			if exponent == 63 then
+				return 0/0
+			end
+
+			local value = (mantissa / 131072 + 1) * 2 ^ (exponent - 31)
+			return sign == 0 and value or -value
+		end
+
+		local function ReadValue(valueType: number): (any?, boolean)
+			if valueType == NIL then
+				return nil, true
+			elseif valueType == BOOLEAN then
+				return ReadU8() == 1, true
+			elseif valueType == NUMBER_I8 then
+				return ReadI8(), true
+			elseif valueType == NUMBER_I16 then
+				return ReadI16(), true
+			elseif valueType == NUMBER_I32 then
+				return ReadI32(), true
+			elseif valueType == NUMBER_U8 then
+				return ReadU8(), true
+			elseif valueType == NUMBER_U16 then
+				return ReadU16(), true
+			elseif valueType == NUMBER_U32 then
+				return ReadU32(), true
+			elseif valueType == NUMBER_F16 then
+				return ReadF16(), true
+			elseif valueType == NUMBER_F24 then
+				return ReadF24(), true
+			elseif valueType == NUMBER_F32 then
+				return ReadF32(), true
+			elseif valueType == NUMBER_F64 then
+				return ReadF64(), true
+			elseif valueType == STRING then
+				return ReadString(ReadU8()), true
+			elseif valueType == STRING_LONG then
+				return ReadString(ReadU16()), true
+			elseif valueType == VECTOR2 then
+				return Vector2.new(ReadF32(), ReadF32()), true
+			elseif valueType == VECTOR3 then
+				return Vector3.new(ReadF32(), ReadF32(), ReadF32()), true
+			elseif valueType == COLOR3 then
+				return Color3.fromRGB(ReadU8(), ReadU8(), ReadU8()), true
+			elseif valueType == UDIM then
+				return UDim.new(ReadI16() * UDIM_INV_SCALE, ReadI16()), true
+			elseif valueType == UDIM2 then
+				return UDim2.new(ReadI16() * UDIM_INV_SCALE, ReadI16(), ReadI16() * UDIM_INV_SCALE, ReadI16()), true
+			elseif valueType == CFRAME then
+				local rx = ReadU16() * CFRAME_INV_SCALE
+				local ry = ReadU16() * CFRAME_INV_SCALE
+				local rz = ReadU16() * CFRAME_INV_SCALE
+				return CFrame.fromEulerAnglesXYZ(rx, ry, rz) + Vector3.new(ReadF32(), ReadF32(), ReadF32()), true
+			elseif valueType == CFRAMEF16U8 then
+				local rx = ReadU8() * CFRAME_INV_SCALE
+				local ry = ReadU8() * CFRAME_INV_SCALE
+				local rz = ReadU8() * CFRAME_INV_SCALE
+				return CFrame.fromEulerAnglesXYZ(rx, ry, rz) + Vector3.new(ReadF16(), ReadF16(), ReadF16()), true
+			elseif valueType == CFRAMEF24U8 then
+				local rx = ReadU8() * CFRAME_INV_SCALE
+				local ry = ReadU8() * CFRAME_INV_SCALE
+				local rz = ReadU8() * CFRAME_INV_SCALE
+				return CFrame.fromEulerAnglesXYZ(rx, ry, rz) + Vector3.new(ReadF24(), ReadF24(), ReadF24()), true
+			elseif valueType == CFRAMEF16U16 then
+				local rx = ReadU16() * CFRAME_INV_SCALE
+				local ry = ReadU16() * CFRAME_INV_SCALE
+				local rz = ReadU16() * CFRAME_INV_SCALE
+				return CFrame.fromEulerAnglesXYZ(rx, ry, rz) + Vector3.new(ReadF16(), ReadF16(), ReadF16()), true
+			elseif valueType == CFRAMEF24U16 then
+				local rx = ReadU16() * CFRAME_INV_SCALE
+				local ry = ReadU16() * CFRAME_INV_SCALE
+				local rz = ReadU16() * CFRAME_INV_SCALE
+				return CFrame.fromEulerAnglesXYZ(rx, ry, rz) + Vector3.new(ReadF24(), ReadF24(), ReadF24()), true
+			elseif valueType == RECT then
+				return Rect.new(ReadF32(), ReadF32(), ReadF32(), ReadF32()), true
+			elseif valueType == NUMBER_RANGE then
+				return NumberRange.new(ReadF32(), ReadF32()), true
+			elseif valueType == NUMBER_SEQUENCE then
+				local length = ReadU8()
+				local keypoints = {}
+				for i = 1, length do
+					table_insert(keypoints, NumberSequenceKeypoint.new(
+						ReadU8() * FLOAT_FROM_BYTE_SCALE,
+						ReadU8() * FLOAT_FROM_BYTE_SCALE,
+						ReadU8() * FLOAT_FROM_BYTE_SCALE
+						))
+				end
+				return NumberSequence.new(keypoints), true
+			elseif valueType == COLOR_SEQUENCE then
+				local length = ReadU8()
+				local keypoints = {}
+				for i = 1, length do
+					table_insert(keypoints, ColorSequenceKeypoint.new(
+						ReadU8() * FLOAT_FROM_BYTE_SCALE,
+						Color3.fromRGB(ReadU8(), ReadU8(), ReadU8())
+						))
+				end
+				return ColorSequence.new(keypoints), true
+			elseif valueType == BRICK_COLOR then
+				return BrickColor.new(ReadU16()), true
+			elseif valueType == VECTOR2F16 then
+				return Vector2.new(ReadF16(), ReadF16()), true
+			elseif valueType == VECTOR2F24 then
+				return Vector2.new(ReadF24(), ReadF24()), true
+			elseif valueType == VECTOR2I16 then
+				return Vector2int16.new(ReadI16(), ReadI16()), true
+			elseif valueType == VECTOR3F16 then
+				return Vector3.new(ReadF16(), ReadF16(), ReadF16()), true
+			elseif valueType == VECTOR3F24 then
+				return Vector3.new(ReadF24(), ReadF24(), ReadF24()), true
+			elseif valueType == VECTOR3I16 then
+				return Vector3int16.new(ReadI16(), ReadI16(), ReadI16()), true
+			elseif valueType == TABLE then
+				local tbl = {}
+				while offset < bufferSize do
+					local keyType = PeekU8(offset)
+					if not keyType or keyType == NIL then
+						if keyType == NIL then
+							offset += 1
+						end
+						break
+					end
+
+					local key, success = ReadValue(keyType)
+					if not success then break end
+
+					local valueType = PeekU8(offset)
+					if not valueType then break end
+
+					local value, success2 = ReadValue(valueType)
+					if not success2 then break end
+
+					tbl[key] = value
+				end
+				return tbl, true
+			else
+				return nil, false
+			end
+		end
+
+		if dataType == NIL then
+			object = nil
+		else
+			object, _ = ReadValue(dataType)
+		end
+
+		return object, offset - startOffset, instancesOffset, instancesArray
+	end
+
+	local readOffset = 0
+	local totalInstancesOffset = 0
+	local allInstances = {}
+
+	while readOffset < bufferSize do
+		local object, bytesRead, instancesRead, instancesArray = ParseData(readOffset)
+		if not bytesRead or bytesRead == 0 then break end
+
+		readOffset += bytesRead
+		totalInstancesOffset += instancesRead
+
+		for i = 1, instancesRead do
+			table_insert(allInstances, instancesArray[i])
+		end
 	end
 
 	local dataSize = readOffset
 
 	local dataBuffer = buffer_create(bufferSize)
 	buffer_copy(dataBuffer, 0, originalBuffer, 0, bufferSize)
-	
+
 	return {
 		_buffer = dataBuffer,
 		_callback = function() end,
 		_maxSize = megabytes(32),
 		_size = bufferSize,
 		_destroyed = false,
-		_writeOffset = dataSize, 
-		_instances = {}, 
-		_instancesOffset = 0
+		_writeOffset = dataSize,
 	}
 end
 
@@ -1045,8 +1204,6 @@ end
 local function read(buf: Buffer): {any}
 	local objects = {}
 	local offset = 0
-	local instancesOffset = 0
-	local instancesArray = buf._instances
 	
 	local function ReadU8(): number
 		local value = buffer_readu8(buf._buffer, offset)
@@ -1100,11 +1257,6 @@ local function read(buf: Buffer): {any}
 		local value = buffer_readstring(buf._buffer, offset, length)
 		offset += length
 		return value
-	end
-
-	local function ReadInstance(): Instance
-		instancesOffset += 1
-		return instancesArray[instancesOffset]
 	end
 
 	local function ReadF16(): number
@@ -1162,7 +1314,6 @@ local function read(buf: Buffer): {any}
 		[NUMBER_F64] = ReadF64,
 		[STRING] = function() return ReadString(ReadU8()) end,
 		[STRING_LONG] = function() return ReadString(ReadU8()) end,
-		[INSTANCE] = function() return ReadInstance() end,
 		[VECTOR2] = function() return Vector2.new(ReadF32(), ReadF32()) end,
 		[VECTOR3] = function() return Vector3.new(ReadF32(), ReadF32(), ReadF32()) end,
 		[VECTOR2F16] = function() return Vector2.new(ReadF16(), ReadF16()) end,
@@ -1278,6 +1429,7 @@ return {
 	tobuffer = tobuffer,
 	flush = flush,
 	create = create,
+	alloc = Alloc,
 	
 	NIL = 0,
 	BOOLEAN = 1,
@@ -1293,25 +1445,24 @@ return {
 	NUMBER_F64 = 13,
 	STRING = 14,
 	STRING_LONG = 15,
-	INSTANCE = 18,
-	VECTOR2 = 19,
-	VECTOR3 = 20,
-	COLOR3 = 21,
-	UDIM = 22,
-	UDIM2 = 23,
-	CFRAME = 24,
-	RECT = 25,
-	NUMBER_RANGE = 26,
-	NUMBER_SEQUENCE = 27,
-	COLOR_SEQUENCE = 28,
-	BRICK_COLOR = 29,
-	TABLE = 30,
-	VECTOR2F16 = 31,
-	VECTOR3F16 = 32,
-	VECTOR2F24 = 33,
-	VECTOR3F24 = 34,
-	VECTOR2I16 = 35,
-	VECTOR3I16 = 36,
+	VECTOR2 = 16,
+	VECTOR3 = 17,
+	COLOR3 = 18,
+	UDIM = 19,
+	UDIM2 = 20,
+	CFRAME = 21,
+	RECT = 22,
+	NUMBER_RANGE = 23,
+	NUMBER_SEQUENCE = 24,
+	COLOR_SEQUENCE = 25,
+	BRICK_COLOR = 26,
+	TABLE = 27,
+	VECTOR2F16 = 28,
+	VECTOR3F16 = 29,
+	VECTOR2F24 = 30,
+	VECTOR3F24 = 31,
+	VECTOR2I16 = 32,
+	VECTOR3I16 = 3,
 	CFRAMEF16U8 = 37,
 	CFRAMEF24U8 = 38,
 	CFRAMEF16U16 = 39,
