@@ -13,14 +13,13 @@
     BinBuffer - advanced buffering module
     
    	@author super_sonic
-   	@version 1.3.0
+   	@version 1.4.0
    	@license MIT
    	
    	@changelog:
-   		- Refactored many code from OOP paradigm to Functional for more perfomance
-   		- Added functions `fromBuffer`, `tobuffer`
-   	@bugfixes:
-   		- Fixed potential Alloc error when buffer has small size
+   		- add deep table support to frombuffer
+   		- function `alloc` npw public
+		- added docs   
 ]]
 
 local NIL = 0
