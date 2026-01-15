@@ -13,7 +13,7 @@
     BinBuffer - advanced buffering module
     
    	@author super_sonic
-   	@version 1.5.0
+   	@version 1.5.1
    	@license MIT
    	
    	@changelog:
@@ -21,8 +21,7 @@
    		- removed flush function
    		- added i24/u24 types
    		- added "with_capacity" function for creating buffer with preallocated size
-   		- removed "alloc" function
-
+	   	- removed "alloc" function
 ]]
 
 local NIL = 0
@@ -121,7 +120,6 @@ local buffer_readbits     = buffer.readbits
 
 export type Buffer = {
 	_buffer: buffer,
-	_maxSize: number,
 	_size: number,
 	_destroyed: boolean,
 	_writeOffset: number,
@@ -130,12 +128,19 @@ export type Buffer = {
 local writers = {}
 
 local function Alloc(buf: Buffer, requiredBytes: number): boolean
-	local targetLength = buf._writeOffset + requiredBytes
-	if buf._writeOffset < targetLength then
-		while buf._writeOffset < targetLength do buf._writeOffset *= 2 end
-		local newBuffer = buffer.create(buf._writeOffset)
-		buffer.copy(newBuffer, 0, buf._buffer, 0, buf._writeOffset)
+	local currentBufferSize = buffer_len(buf._buffer)
+	local neededSpace = buf._writeOffset + requiredBytes
+
+	if neededSpace > currentBufferSize then
+		local newSize = currentBufferSize
+		while newSize < neededSpace do
+			newSize = math.min(newSize * 2, buf._maxSize)
+		end
+
+		local newBuffer = buffer_create(newSize)
+		buffer_copy(newBuffer, 0, buf._buffer, 0, buf._writeOffset)
 		buf._buffer = newBuffer
+		buf._size = newSize
 	end
 	return true
 end
@@ -264,11 +269,9 @@ end
 -- creates a new buffer
 local function create(): Buffer
 	local size = 4
-	local maxSize = megabytes(32)
 
 	return {
 		_buffer = buffer_create(size),
-		_maxSize = maxSize,
 		_destroyed = false,
 		_size = size,
 		_writeOffset = 0,
@@ -283,11 +286,10 @@ local function with_capacity(capacity: number): Buffer
 	
 	return {
 		_buffer = buffer_create(capacity),
-		_maxSize = maxSize,
 		_destroyed = false,
 		_size = capacity,
 		_writeOffset = 0
-	}
+	} :: Buffer
 end
 
 -- clears buffer but not destroys
@@ -1195,18 +1197,12 @@ local function fromBuffer(buf: buffer): Buffer?
 
 	local readOffset = 0
 	local totalInstancesOffset = 0
-	local allInstances = {}
 
 	while readOffset < bufferSize do
-		local object, bytesRead, instancesRead, instancesArray = ParseData(readOffset)
+		local object, bytesRead = ParseData(readOffset)
 		if not bytesRead or bytesRead == 0 then break end
 
 		readOffset += bytesRead
-		totalInstancesOffset += instancesRead
-
-		for i = 1, instancesRead do
-			table_insert(allInstances, instancesArray[i])
-		end
 	end
 
 	local dataSize = readOffset
@@ -1217,7 +1213,6 @@ local function fromBuffer(buf: buffer): Buffer?
 	return {
 		_buffer = dataBuffer,
 		_callback = function() end,
-		_maxSize = megabytes(32),
 		_size = bufferSize,
 		_destroyed = false,
 		_writeOffset = dataSize,
