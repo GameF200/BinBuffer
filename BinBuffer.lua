@@ -134,7 +134,7 @@ local function Alloc(buf: Buffer, requiredBytes: number): boolean
 	if neededSpace > currentBufferSize then
 		local newSize = currentBufferSize
 		while newSize < neededSpace do
-			newSize = math.min(newSize * 2, buf._maxSize)
+			newSize = newSize * 2
 		end
 
 		local newBuffer = buffer_create(newSize)
