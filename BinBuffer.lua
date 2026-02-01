@@ -17,11 +17,12 @@
    	@license MIT
    	
    	@changelog:
-   		- removed "create" function args
-   		- removed flush function
-   		- added i24/u24 types
-   		- added "with_capacity" function for creating buffer with preallocated size
-	   	- removed "alloc" function
+   		- fixed read bug for i24/u24
+   		- added "truncate" function for buffer
+   		
+   	@what next
+   		- optimized i24/u24 writing
+   		- maybe more types
 ]]
 
 local NIL = 0
@@ -163,8 +164,6 @@ local function WriteF16Data(buf: buffer, offset: number, value: number)
 		buffer_writebits(buf, bitOffset + 15, 1, sign)
 	end
 end
-
-
 
 local function WriteU24Data(buf: buffer, offset: number, value: number)
 	local bitOffset = offset * 8
@@ -864,6 +863,7 @@ function writers.addBrickColor(buf: Buffer, value: BrickColor): boolean
 	return true
 end
 
+local Typeof = typeof
 
 function writers.addTable(buf: Buffer, value: {[any]: any}): boolean
 	if buf._writeOffset + 1 > buffer_len(buf._buffer) then
@@ -874,7 +874,7 @@ function writers.addTable(buf: Buffer, value: {[any]: any}): boolean
 	buf._writeOffset += 1
 
 	for key, val in pairs(value) do
-		local keyType = typeof(key)
+		local keyType = Typeof(key)
 		if keyType == "number" then
 			if not writers.addNumber(buf, key) then return false end
 		elseif keyType == "string" then
@@ -885,7 +885,7 @@ function writers.addTable(buf: Buffer, value: {[any]: any}): boolean
 			if not writers.addString(buf, tostring(key)) then return false end
 		end
 
-		local valType = typeof(val)
+		local valType = Typeof(val)
 		if valType == "number" then
 			if not writers.addNumber(buf, val) then return false end
 		elseif valType == "string" then
@@ -1224,6 +1224,12 @@ local function tobuffer(buf: Buffer): buffer
 	return	buf._buffer
 end
 
+local function truncate(buf: Buffer)
+	local truncated = buffer_create(buf._writeOffset)
+	buffer_copy(truncated, 0, buf._buffer, 0)
+	buf._buffer = truncated
+end
+
 -- reads all data from BinBuffer
 local function read(buf: Buffer): {any}
 	local objects = {}
@@ -1335,8 +1341,8 @@ local function read(buf: Buffer): {any}
 		[NUMBER_F16] = ReadF16,
 		[NUMBER_F24] = ReadF24,
 		[NUMBER_F32] = ReadF32,
-		[NUMBER_U24] = function() return ReadU24(buf._buffer, offset) end,
-		[NUMBER_I24] = function() return ReadI24(buf._buffer, offset) end,
+		[NUMBER_U24] = function() offset += 3 return ReadU24(buf._buffer, offset - 3) end,
+		[NUMBER_I24] = function() offset += 3 return ReadI24(buf._buffer, offset - 3) end,
 		[NUMBER_F64] = ReadF64,
 		[STRING] = function() return ReadString(ReadU8()) end,
 		[STRING_LONG] = function() return ReadString(ReadU16()) end,
@@ -1445,7 +1451,8 @@ end
 
 
 -- API
-return {
+return
+{
 	writers = writers,
 	read = read,
 	bytes = bytes,
@@ -1457,8 +1464,9 @@ return {
 	tobuffer = tobuffer,
 	create = create,
 	with_capacity = with_capacity,
-	
+	truncate = truncate,
 
+	-- exporting types
 	NIL = 0,
 	BOOLEAN = 1,
 	NUMBER_I8 = 2,
